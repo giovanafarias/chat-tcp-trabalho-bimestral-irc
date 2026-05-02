@@ -1,35 +1,41 @@
 import socket
 import threading
 
-HOST = 'localhost'
-PORT = 5000
-
-cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-cliente.connect((HOST, PORT))
-
-nome = input("Digite seu nome: ")
-cliente.send(nome.encode())
-
-def receber():
+def receive_messages(cliente_socket):
     while True:
         try:
-            mensagem = cliente.recv(1024).decode()
-            if mensagem:
-                print(mensagem)
+            data = cliente_socket.recv(1024).decode('utf-8')
+            if data:
+                print(data)
             else:
                 break
         except:
-            print("Erro na conexão.")
-            cliente.close()
+            print("Conexão encerrada.")
+            cliente_socket.close()
             break
 
-def enviar():
+def connect_server(host: str, port: int):
+    cliente_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    cliente_socket.connect((host, port))
+
+    print("Connected to server")
+
+    nome = input("Digite seu nome: ")
+    cliente_socket.send(nome.encode('utf-8'))
+
+    thread = threading.Thread(
+        target=receive_messages,
+        args=(cliente_socket,)
+    )
+    thread.start()
+
     while True:
-        mensagem = input()
-        cliente.send(mensagem.encode())
+        message = input()
+        cliente_socket.send(message.encode('utf-8'))
 
-thread_receber = threading.Thread(target=receber)
-thread_receber.start()
 
-thread_enviar = threading.Thread(target=enviar)
-thread_enviar.start()
+if __name__ == '__main__':
+    HOST = 'localhost'  
+    PORT = 8000
+
+    connect_server(HOST, PORT)

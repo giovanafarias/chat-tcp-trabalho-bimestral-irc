@@ -2,27 +2,18 @@ import socket
 import threading
 from datetime import datetime
 
-HOST = 'localhost'
-PORT = 5000
-
-servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-servidor.bind((HOST, PORT))
-servidor.listen()
-
 clientes = {}  
 historico = []  
 
-print("Servidor iniciado...")
-
-def registrar_log(texto):
+def registrar_log(texto: str):
     with open("log.txt", "a", encoding="utf-8") as log:
         log.write(f"{datetime.now()} - {texto}\n")
 
-def broadcast(mensagem, remetente_socket=None):
+def broadcast(mensagem: str, remetente=None):
     for cliente in clientes:
-        if cliente != remetente_socket:
+        if cliente != remetente:
             try:
-                cliente.send(mensagem.encode())
+                cliente.send(mensagem.encode('utf-8'))
             except:
                 remover_cliente(cliente)
 
@@ -35,72 +26,84 @@ def remover_cliente(cliente):
         cliente.close()
         broadcast(f"{nome} saiu do chat.")
 
-def tratar_cliente(cliente):
+def handle_client(client_socket, addr):
     try:
-        nome = cliente.recv(1024).decode()
-        clientes[cliente] = nome
-        print(f"{nome} conectou.")
+        nome = client_socket.recv(1024).decode('utf-8')
+        clientes[client_socket] = nome
+
+        print(f"{addr} - {nome} conectou.")
         registrar_log(f"{nome} conectou.")
 
-        cliente.send("Conectado ao servidor!\n".encode())
-
         if historico:
-            cliente.send("\n--- Últimas mensagens ---\n".encode())
+            client_socket.send("\n--- Últimas mensagens ---\n".encode('utf-8'))
             for msg in historico:
-                cliente.send((msg + "\n").encode())
-            cliente.send("-------------------------\n".encode())
+                client_socket.send((msg + "\n").encode('utf-8'))
+            client_socket.send("-------------------------\n".encode('utf-8'))
 
-        broadcast(f"{nome} entrou no chat.", cliente)
+        broadcast(f"{nome} entrou no chat.", client_socket)
 
         while True:
-            mensagem = cliente.recv(1024).decode()
-
-            if not mensagem:
+            data = client_socket.recv(1024).decode('utf-8')
+            if not data:
                 break
 
-            if mensagem == "/usuarios":
+            if data == "/usuarios":
                 lista = "Usuários online:\n"
                 for n in clientes.values():
                     lista += f"- {n}\n"
-                cliente.send(lista.encode())
+                client_socket.send(lista.encode('utf-8'))
                 continue
 
-            if mensagem.startswith("/privado"):
+            if data.startswith("/privado"):
                 try:
-                    partes = mensagem.split(" ", 2)
-                    destino_nome = partes[1]
-                    texto = partes[2]
+                    partes = data.split(" ", 2)
+                    destino = partes[1]
+                    mensagem = partes[2]
 
                     for sock, n in clientes.items():
-                        if n == destino_nome:
-                            msg_privada = f"(Privado) {nome}: {texto}"
-                            sock.send(msg_privada.encode())
-                            cliente.send(msg_privada.encode())
-                            registrar_log(msg_privada)
+                        if n == destino:
+                            msg = f"(Privado) {nome}: {mensagem}"
+                            sock.send(msg.encode('utf-8'))
+                            client_socket.send(msg.encode('utf-8'))
+                            registrar_log(msg)
                             break
                 except:
-                    cliente.send("Uso: /privado nome mensagem\n".encode())
+                    client_socket.send("Uso: /privado nome mensagem\n".encode('utf-8'))
                 continue
 
-            msg_formatada = f"{nome}: {mensagem}"
-            print(msg_formatada)
-            registrar_log(msg_formatada)
+            mensagem_formatada = f"{nome}: {data}"
+            print(mensagem_formatada)
+            registrar_log(mensagem_formatada)
 
-            historico.append(msg_formatada)
+            historico.append(mensagem_formatada)
             if len(historico) > 10:
                 historico.pop(0)
 
-            broadcast(msg_formatada, cliente)
+            broadcast(mensagem_formatada, client_socket)
 
     except:
         pass
     finally:
-        remover_cliente(cliente)
+        remover_cliente(client_socket)
 
-def aceitar_conexoes():
+def start_server(host: str, port: int):
+
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((host, port))
+    server_socket.listen()
+
+    print(f"Server Started at {host}:{port}")
+
     while True:
-        cliente, endereco = servidor.accept()
-        thread = threading.Thread(target=tratar_cliente, args=(cliente,))
+        client_socket, addr = server_socket.accept()
+        thread = threading.Thread(
+            target=handle_client,
+            args=(client_socket, addr)
+        )
         thread.start()
 
-aceitar_conexoes()
+if __name__ == '__main__':
+    HOST = '0.0.0.0'
+    PORT = 8000
+
+    start_server(HOST, PORT)
